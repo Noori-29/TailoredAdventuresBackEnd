@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tailored Adventures & Budget Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         .card {
             border: 1px solid #ccc;
@@ -18,19 +19,18 @@
         .bold {
             font-weight: bold;
         }
-        /* Modal styles */
         .modal {
-            display: none; 
-            position: fixed; 
-            z-index: 1; 
-            padding-top: 100px; 
+            display: none;
+            position: fixed;
+            z-index: 1;
+            padding-top: 100px;
             left: 0;
             top: 0;
-            width: 100%; 
-            height: 100%; 
-            overflow: auto; 
-            background-color: rgb(0,0,0); 
-            background-color: rgba(0,0,0,0.4); 
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
         }
         .modal-content {
             background-color: #fefefe;
@@ -51,16 +51,10 @@
             text-decoration: none;
             cursor: pointer;
         }
-        .progress-bar {
+        #map {
+            height: 400px;
             width: 100%;
-            background-color: #f3f3f3;
-            border-radius: 5px;
-        }
-        .progress-bar-fill {
-            display: block;
-            height: 20px;
-            background-color: #4caf50;
-            border-radius: 5px;
+            margin: 20px 0;
         }
     </style>
 </head>
@@ -68,28 +62,33 @@
     <h1>Tailored Adventures</h1>
     <h2>Plan Generator</h2>
     <form id="travelPlanForm">
+        <label for="tourName">Tour Name:</label>
+        <input type="text" id="tourName" name="tourName" required><br><br>
         <label for="from">From:</label>
         <input type="text" id="from" name="from" required><br><br>
         <label for="to">To:</label>
         <input type="text" id="to" name="to" required><br><br>
-        <label for="days">Number of Days:</label>
-        <input type="number" id="days" name="days" required><br><br>
+        <label for="startDate">Start Date:</label>
+        <input type="date" id="startDate" name="startDate" required><br><br>
+        <label for="endDate">End Date:</label>
+        <input type="date" id="endDate" name="endDate" required><br><br>
         <label for="budget">Budget (in Rupees):</label>
         <input type="number" id="budget" name="budget" required><br><br>
         <label for="persons">Number of Persons:</label>
         <input type="number" id="persons" name="persons" required><br><br>
-        <button type="submit">Generate Plans</button>
+        <button type="submit">Generate Plan</button>
     </form>
 
-    <h2>Generated Plans</h2>
-    <div id="plans"></div>
+    <h2>Generated Plan</h2>
+    <div id="plan"></div>
+    <div id="map"></div>
 
     <h2>Travel Plans in Database</h2>
     <button id="fetchAll">Fetch All Travel Plans</button>
     <div id="allPlans"></div>
 
     <h2>Budget Tracker</h2>
-    <button id="createBudget">Create New Budget</button>
+    <button id="createBudgetButton">Create New Budget</button>
     <div id="budgets"></div>
 
     <!-- Create Budget Modal -->
@@ -98,8 +97,9 @@
             <span class="close">&times;</span>
             <h2>Create Budget</h2>
             <form id="createBudgetForm">
-                <label for="budgetName">Budget Name:</label>
-                <input type="text" id="budgetName" name="budgetName" required><br><br>
+                <input type="hidden" id="planId" name="planId">
+                <label for="name">Budget Name:</label>
+                <input type="text" id="name" name="name" required><br><br>
                 <label for="shopping">Shopping:</label>
                 <input type="number" id="shopping" name="shopping" required><br><br>
                 <label for="transportation">Transportation:</label>
@@ -108,6 +108,8 @@
                 <input type="number" id="food" name="food" required><br><br>
                 <label for="accommodation">Accommodation:</label>
                 <input type="number" id="accommodation" name="accommodation" required><br><br>
+                <label for="miscellaneous">Miscellaneous:</label>
+                <input type="number" id="miscellaneous" name="miscellaneous" required><br><br>
                 <button type="submit">Create Budget</button>
             </form>
         </div>
@@ -128,305 +130,286 @@
                 <input type="number" id="foodSpent" name="foodSpent" required><br><br>
                 <label for="accommodationSpent">Accommodation Spent:</label>
                 <input type="number" id="accommodationSpent" name="accommodationSpent" required><br><br>
+                <label for="miscellaneousSpent">Miscellaneous Spent:</label>
+                <input type="number" id="miscellaneousSpent" name="miscellaneousSpent" required><br><br>
                 <button type="submit">Update Budget</button>
             </form>
         </div>
     </div>
 
-    <h2>Chatbot</h2>
-    <form id="chatForm">
-        <label for="question">Ask a question:</label>
-        <input type="text" id="question" name="question" required><br><br>
-        <button type="submit">Ask</button>
-    </form>
-    <div id="chatResponse"></div>
+    <h2>Fetch All Budgets</h2>
+    <button id="fetchAllBudgets">Fetch All Budgets</button>
+    <div id="budgetContainer"></div>
 
-    <h2>Chat History</h2>
-    <button id="fetchChatHistory">Fetch Chat History</button>
-    <div id="chatHistory"></div>
-
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        // Plan Generator Form
         document.getElementById('travelPlanForm').addEventListener('submit', async function(event) {
             event.preventDefault();
-            const from = document.getElementById('from').value;
-            const to = document.getElementById('to').value;
-            const days = document.getElementById('days').value;
-            const budget = document.getElementById('budget').value;
-            const persons = document.getElementById('persons').value;
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
 
-            const response = await fetch('/api/travel-plans/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ from, to, days, budget, persons })
-            });
-
-            const result = await response.json();
-            const plansDiv = document.getElementById('plans');
-            plansDiv.innerHTML = '';
-
-            if (result.error) {
-                plansDiv.innerHTML = `<p>Error: ${result.error}</p>`;
-            } else {
-                const plans = parsePlans(result.plans.join(' '));
-                plans.forEach((plan, index) => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.innerHTML = `<h3>Plan ${index + 1}</h3>${formatPlan(plan)}`;
-                    plansDiv.appendChild(card);
+            try {
+                const response = await fetch('/api/travel-plans/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
                 });
-            }
 
-            document.getElementById('travelPlanForm').reset();
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to generate plan');
+                }
+
+                const result = await response.json();
+                displayPlan(result, 'plan');
+                displayMap(result.route);
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Failed to generate plan. Please try again. ${error.message}`);
+            }
         });
-
-        function parsePlans(responseText) {
-            const planRegex = /Plan \d+: ([^]*?)(?=Plan \d+:|$)/g;
-            let match;
-            const plans = [];
-            while (match = planRegex.exec(responseText)) {
-                plans.push(match[1].trim());
-            }
-            return plans;
-        }
-
-        function formatPlan(planText) {
-            const lines = planText.split('\n');
-            const keywords = ['Day', 'Accommodation', 'Transportation', 'Activity', 'Meal'];
-            return '<ul>' + lines.map(line => {
-                keywords.forEach(keyword => {
-                    const regex = new RegExp(`(${keyword}.*?)`, 'gi');
-                    line = line.replace(regex, `<span class="bold">$1</span>`);
-                });
-                return `<li>${line}</li>`;
-            }).join('') + '</ul>';
-        }
 
         document.getElementById('fetchAll').addEventListener('click', async function() {
-            const response = await fetch('/api/travel-plans');
-            const plans = await response.json();
-            const allPlansDiv = document.getElementById('allPlans');
-            allPlansDiv.innerHTML = '';
-
-            plans.forEach(plan => {
-                const planElement = document.createElement('div');
-                planElement.className = 'card';
-                planElement.innerHTML = `
-                    <p><strong>ID:</strong> ${plan._id}</p>
-                    <p><strong>From:</strong> ${plan.from}</p>
-                    <p><strong>To:</strong> ${plan.to}</p>
-                    <p><strong>Days:</strong> ${plan.days}</p>
-                    <p><strong>Budget:</strong> ${plan.budget}</p>
-                    <p><strong>Persons:</strong> ${plan.persons}</p>
-                    <p><strong>Plans:</strong> ${plan.plans.join('<br>')}</p>
-                    <button onclick="updatePlan('${plan._id}')">Update</button>
-                    <button onclick="deletePlan('${plan._id}')">Delete</button>
-                    <button onclick="showCreateBudgetModal('${plan._id}')">Create Budget</button>
-                    <hr>
-                `;
-                allPlansDiv.appendChild(planElement);
-            });
+            try {
+                const response = await fetch('/api/travel-plans');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch travel plans');
+                }
+                const plans = await response.json();
+                const allPlansDiv = document.getElementById('allPlans');
+                allPlansDiv.innerHTML = '';
+                plans.forEach(plan => displayPlan(plan, 'allPlans'));
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to fetch travel plans. Please try again.');
+            }
         });
 
-        async function updatePlan(id) {
-            const newFrom = prompt('Enter new "From" value:');
-            const newTo = prompt('Enter new "To" value:');
-            const newDays = prompt('Enter new "Number of Days":');
-            const newBudget = prompt('Enter new "Budget":');
-            const newPersons = prompt('Enter new "Number of Persons":');
-
-            const response = await fetch(`/api/travel-plans/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: newFrom,
-                    to: newTo,
-                    days: newDays,
-                    budget: newBudget,
-                    persons: newPersons
-                })
-            });
-
-            const result = await response.json();
-            alert(result.error ? `Error: ${result.error}` : 'Travel plan updated successfully!');
-        }
-
-        async function deletePlan(id) {
-            const response = await fetch(`/api/travel-plans/${id}`, {
-                method: 'DELETE'
-            });
-
-            const result = await response.json();
-            alert(result.error ? `Error: ${result.error}` : 'Travel plan deleted successfully!');
-            document.getElementById('fetchAll').click();
-        }
-
-        // Budget Tracker
-        document.getElementById('createBudget').addEventListener('click', function() {
-            document.getElementById('createBudgetModal').style.display = 'block';
-        });
-
-        document.querySelectorAll('.close').forEach(closeBtn => {
-            closeBtn.addEventListener('click', function() {
-                document.getElementById('createBudgetModal').style.display = 'none';
-                document.getElementById('updateBudgetModal').style.display = 'none';
-            });
+        document.getElementById('createBudgetButton').addEventListener('click', function() {
+            const createBudgetModal = document.getElementById('createBudgetModal');
+            createBudgetModal.style.display = 'block';
         });
 
         document.getElementById('createBudgetForm').addEventListener('submit', async function(event) {
             event.preventDefault();
-            const planId = document.getElementById('budgetName').value; // Use budgetName as planId
-            const shopping = document.getElementById('shopping').value;
-            const transportation = document.getElementById('transportation').value;
-            const food = document.getElementById('food').value;
-            const accommodation = document.getElementById('accommodation').value;
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
 
-            const response = await fetch('/api/budgets', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ planId, shopping, transportation, food, accommodation })
-            });
+            try {
+                const response = await fetch('/api/budgets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
 
-            const result = await response.json();
-            if (result.error) {
-                alert(`Error: ${result.error}`);
-            } else {
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to create budget');
+                }
+
                 alert('Budget created successfully!');
                 document.getElementById('createBudgetModal').style.display = 'none';
-                fetchBudgets(); // Refresh budgets after creating new budget
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Failed to create budget. Please try again. ${error.message}`);
             }
         });
+
+        document.getElementById('fetchAllBudgets').addEventListener('click', async function() {
+            try {
+                const response = await fetch('/api/budgets');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch budgets');
+                }
+                const budgets = await response.json();
+                const budgetContainer = document.getElementById('budgetContainer');
+                budgetContainer.innerHTML = '';
+                budgets.forEach(budget => displayBudget(budget, 'budgetContainer'));
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to fetch budgets. Please try again.');
+            }
+        });
+
+        async function createBudgetFromPlan(planId) {
+            try {
+                const response = await fetch(`/api/budgets/from-plan/${planId}`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to create budget from plan');
+                }
+
+                alert('Budget created from plan successfully!');
+                document.getElementById('fetchAll').click();
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Failed to create budget from plan. Please try again. ${error.message}`);
+            }
+        }
+
+        function displayPlan(plan, containerId) {
+            const container = document.getElementById(containerId);
+            const planDiv = document.createElement('div');
+            planDiv.className = 'card';
+            planDiv.innerHTML = `
+                <h3>${plan.tourName}</h3>
+                <p><strong>From:</strong> ${plan.from}</p>
+                <p><strong>To:</strong> ${plan.to}</p>
+                <p><strong>Start Date:</strong> ${new Date(plan.startDate).toLocaleDateString()}</p>
+                <p><strong>End Date:</strong> ${new Date(plan.endDate).toLocaleDateString()}</p>
+                <p><strong>Budget:</strong> ${plan.budget}</p>
+                <p><strong>Persons:</strong> ${plan.persons}</p>
+                <p><strong>Places to Visit:</strong> ${plan.placesToVisit.join(', ')}</p>
+                <p><strong>Suggested Hotels:</strong> ${plan.suggestedHotels.join(', ')}</p>
+                <p><strong>Budget Estimation:</strong> ${JSON.stringify(plan.budgetEstimation)}</p>
+                <p><strong>Route:</strong> ${plan.route}</p>
+                <button onclick="createBudgetFromPlan('${plan._id}')">Create Budget from Plan</button>
+                <button onclick="deletePlan('${plan._id}')">Delete Plan</button>
+            `;
+            container.appendChild(planDiv);
+        }
+
+        function displayMap(route) {
+            const mapContainer = document.getElementById('map');
+            mapContainer.innerHTML = '';
+
+            const map = L.map('map').setView([31.5497, 74.3436], 6); // Centered at Lahore
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            const routeCoordinates = parseRouteCoordinates(route);
+            L.polyline(routeCoordinates, { color: 'blue' }).addTo(map);
+            map.fitBounds(L.polyline(routeCoordinates).getBounds());
+        }
+
+        function parseRouteCoordinates(route) {
+            // Dummy route coordinates for demonstration purposes.
+            return [
+                [31.5497, 74.3436], // Lahore
+                [34.0151, 71.5249], // Peshawar
+                [34.4672, 73.3845], // Abbottabad
+                [34.8680, 73.3287]  // Naran
+            ];
+        }
+
+        function displayBudget(budget, containerId) {
+            const container = document.getElementById(containerId);
+            const budgetDiv = document.createElement('div');
+            budgetDiv.className = 'card';
+            budgetDiv.innerHTML = `
+                <h3>${budget.name}</h3>
+                <p><strong>Shopping:</strong> ${budget.shopping}</p>
+                <p><strong>Transportation:</strong> ${budget.transportation}</p>
+                <p><strong>Food:</strong> ${budget.food}</p>
+                <p><strong>Accommodation:</strong> ${budget.accommodation}</p>
+                <p><strong>Miscellaneous:</strong> ${budget.miscellaneous}</p>
+                <p><strong>Total Spent:</strong> ${budget.totalSpent}</p>
+                <p><strong>Total Remaining:</strong> ${budget.totalRemaining}</p>
+                <button onclick="updateBudget('${budget._id}')">Update Budget</button>
+                <button onclick="deleteBudget('${budget._id}')">Delete Budget</button>
+            `;
+            container.appendChild(budgetDiv);
+        }
+
+        function updateBudget(id) {
+            const updateBudgetModal = document.getElementById('updateBudgetModal');
+            document.getElementById('updateBudgetId').value = id;
+            updateBudgetModal.style.display = 'block';
+        }
 
         document.getElementById('updateBudgetForm').addEventListener('submit', async function(event) {
             event.preventDefault();
-            const budgetId = document.getElementById('updateBudgetId').value;
-            const shoppingSpent = document.getElementById('shoppingSpent').value;
-            const transportationSpent = document.getElementById('transportationSpent').value;
-            const foodSpent = document.getElementById('foodSpent').value;
-            const accommodationSpent = document.getElementById('accommodationSpent').value;
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
 
-            const response = await fetch(`/api/budgets/${budgetId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ shoppingSpent, transportationSpent, foodSpent, accommodationSpent })
-            });
+            try {
+                const response = await fetch(`/api/budgets/${data.budgetId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
 
-            const result = await response.json();
-            if (result.error) {
-                alert(`Error: ${result.error}`);
-            } else {
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to update budget');
+                }
+
                 alert('Budget updated successfully!');
                 document.getElementById('updateBudgetModal').style.display = 'none';
-                fetchBudgets(); // Refresh budgets after updating budget
-            }
-        });
-
-        async function fetchBudgets() {
-            try {
-                const response = await fetch('/api/budgets');
-                const budgets = await response.json();
-                displayBudgets(budgets);
+                document.getElementById('fetchAllBudgets').click();
             } catch (error) {
-                console.error('Error fetching budgets:', error);
+                console.error('Error:', error);
+                alert(`Failed to update budget. Please try again. ${error.message}`);
+            }
+        });
+
+        async function deleteBudget(id) {
+            const confirmDelete = confirm('Are you sure you want to delete this budget?');
+            if (confirmDelete) {
+                try {
+                    const response = await fetch(`/api/budgets/${id}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to delete budget');
+                    }
+
+                    alert('Budget deleted successfully!');
+                    document.getElementById('fetchAllBudgets').click();
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert(`Failed to delete budget. Please try again. ${error.message}`);
+                }
             }
         }
 
-        function displayBudgets(budgets) {
-            const budgetsDiv = document.getElementById('budgets');
-            budgetsDiv.innerHTML = '';
-
-            budgets.forEach(budget => {
-                const shoppingRemaining = budget.shopping - budget.shoppingSpent;
-                const transportationRemaining = budget.transportation - budget.transportationSpent;
-                const foodRemaining = budget.food - budget.foodSpent;
-                const accommodationRemaining = budget.accommodation - budget.accommodationSpent;
-
-                const shoppingPercent = ((budget.shoppingSpent / budget.shopping) * 100).toFixed(2);
-                const transportationPercent = ((budget.transportationSpent / budget.transportation) * 100).toFixed(2);
-                const foodPercent = ((budget.foodSpent / budget.food) * 100).toFixed(2);
-                const accommodationPercent = ((budget.accommodationSpent / budget.accommodation) * 100).toFixed(2);
-
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.innerHTML = `
-                    <h3>${budget.planId}</h3>
-                    <p>Shopping: ${budget.shopping} Rs (Spent: ${budget.shoppingSpent} Rs, Remaining: ${shoppingRemaining} Rs)</p>
-                    <div class="progress-bar"><div class="progress-bar-fill" style="width: ${shoppingPercent}%"></div></div>
-                    <p>Transportation: ${budget.transportation} Rs (Spent: ${budget.transportationSpent} Rs, Remaining: ${transportationRemaining} Rs)</p>
-                    <div class="progress-bar"><div class="progress-bar-fill" style="width: ${transportationPercent}%"></div></div>
-                    <p>Food: ${budget.food} Rs (Spent: ${budget.foodSpent} Rs, Remaining: ${foodRemaining} Rs)</p>
-                    <div class="progress-bar"><div class="progress-bar-fill" style="width: ${foodPercent}%"></div></div>
-                    <p>Accommodation: ${budget.accommodation} Rs (Spent: ${budget.accommodationSpent} Rs, Remaining: ${accommodationRemaining} Rs)</p>
-                    <div class="progress-bar"><div class="progress-bar-fill" style="width: ${accommodationPercent}%"></div></div>
-                    <button onclick="showUpdateBudgetModal('${budget._id}')">Update Budget</button>
-                `;
-                budgetsDiv.appendChild(card);
-            });
-        }
-
-        function showCreateBudgetModal(planId) {
-            document.getElementById('budgetName').value = planId; // Set the planId when showing the modal
-            document.getElementById('createBudgetModal').style.display = 'block';
-        }
-
-        function showUpdateBudgetModal(budgetId) {
-            document.getElementById('updateBudgetId').value = budgetId; // Set the budgetId when showing the modal
-            document.getElementById('updateBudgetModal').style.display = 'block';
-        }
-
-        // Chatbot Form
-        document.getElementById('chatForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const question = document.getElementById('question').value;
-
-            const response = await fetch('/api/chatbot/query', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ question })
-            });
-
-            const result = await response.json();
-            const chatResponseDiv = document.getElementById('chatResponse');
-            chatResponseDiv.innerHTML = '';
-
-            if (result.error) {
-                chatResponseDiv.innerHTML = `<p>Error: ${result.error}</p>`;
-            } else {
-                chatResponseDiv.innerHTML = `<p><strong>Question:</strong> ${result.question}</p><p><strong>Answer:</strong> ${result.answer}</p>`;
+        document.querySelectorAll('.close').forEach(closeBtn => {
+            closeBtn.onclick = function() {
+                document.getElementById('createBudgetModal').style.display = 'none';
+                document.getElementById('updateBudgetModal').style.display = 'none';
             }
-
-            document.getElementById('chatForm').reset();
         });
 
-        document.getElementById('fetchChatHistory').addEventListener('click', async function() {
-            const response = await fetch('/api/chatbot/history');
-            const chats = await response.json();
-            const chatHistoryDiv = document.getElementById('chatHistory');
-            chatHistoryDiv.innerHTML = '';
+        window.onclick = function(event) {
+            const createBudgetModal = document.getElementById('createBudgetModal');
+            const updateBudgetModal = document.getElementById('updateBudgetModal');
+            if (event.target === createBudgetModal) {
+                createBudgetModal.style.display = 'none';
+            }
+            if (event.target === updateBudgetModal) {
+                updateBudgetModal.style.display = 'none';
+            }
+        }
 
-            chats.forEach(chat => {
-                const chatElement = document.createElement('div');
-                chatElement.innerHTML = `
-                    <p><strong>Question:</strong> ${chat.question}</p>
-                    <p><strong>Answer:</strong> ${chat.answer}</p>
-                    <hr>
-                `;
-                chatHistoryDiv.appendChild(chatElement);
-            });
-        });
+        async function deletePlan(id) {
+            const confirmDelete = confirm('Are you sure you want to delete this plan?');
+            if (confirmDelete) {
+                try {
+                    const response = await fetch(`/api/travel-plans/delete/${id}`, {
+                        method: 'DELETE'
+                    });
 
-        // Fetch budgets on page load
-        fetchBudgets();
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to delete plan');
+                    }
+
+                    alert('Plan deleted successfully!');
+                    document.getElementById('fetchAll').click();
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert(`Failed to delete plan. Please try again. ${error.message}`);
+                }
+            }
+        }
     </script>
 </body>
 </html>

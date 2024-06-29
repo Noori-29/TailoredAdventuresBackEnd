@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const travelPlanRoutes = require('./routes/travelPlanRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
-const budgetRoutes = require('./routes/budgetRoutes'); // Ensure this is imported
+const budgetRoutes = require('./routes/budgetRoutes');
 
 const app = express();
 
@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/travel-plans', travelPlanRoutes);
 app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/budgets', budgetRoutes); // Ensure this is used
+app.use('/api/budgets', budgetRoutes);
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
