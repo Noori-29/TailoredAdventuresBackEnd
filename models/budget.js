@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 
 const budgetSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
-  planId: { type: String },
   shopping: { type: Number, required: true },
   transportation: { type: Number, required: true },
   food: { type: Number, required: true },
@@ -21,6 +20,10 @@ budgetSchema.virtual('totalSpent').get(function() {
 
 budgetSchema.virtual('totalRemaining').get(function() {
   return (this.shopping + this.transportation + this.food + this.accommodation + this.miscellaneous) - this.totalSpent;
+});
+
+budgetSchema.virtual('totalBudget').get(function() {
+  return this.shopping + this.transportation + this.food + this.accommodation + this.miscellaneous;
 });
 
 module.exports = mongoose.model('Budget', budgetSchema);

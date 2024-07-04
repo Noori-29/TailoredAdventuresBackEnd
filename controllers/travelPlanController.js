@@ -246,10 +246,7 @@ const deleteTravelPlan = async (req, res) => {
     res.status(200).json({ message: 'Travel plan deleted successfully' });
   } catch (error) {
     console.error('Error deleting travel plans:', error);
-    res.status(500).json({
-      error: 'Failed to delete travel plans',
-      details: error.message || error.response?.data,
-    });
+    res.status(500).json({ error: 'Failed to delete travel plans', details: error.message });
   }
 };
 
